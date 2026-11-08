@@ -1,0 +1,10 @@
+{
+  "board": "NUCLEO-H7S3L8",
+  "device": "STM32H7S3L8H6",
+  "core": "Cortex-M7",
+  "order": 0,
+  "toolchain": "GCC",
+  "source": {
+    "sourceType": "Empty"
+  }
+}
