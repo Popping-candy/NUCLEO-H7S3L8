@@ -1,3 +1,4 @@
+#include <stddef.h>
 #include "Mcu_Drv.h"
 #include "Mcu_Reg.h"
 
@@ -5,20 +6,33 @@
 #define MCU_CSI_HZ 4000000U
 #define MCU_HSE_HZ 24000000U
 
-/* 24 MHz / 4 × 128 / 4 = 192 MHz。M 直接编码，N 和 P 写入分频值减一。 */
-#define MCU_PLL_M 4U
-#define MCU_PLL_N 128U
-#define MCU_PLL_P 4U
 #define MCU_PLL_AHB_DIV2 8U
 #define MCU_PLL_APB_DIV2 0x4444U
 #define MCU_FLASH_HSI_TIMING 1U
-/* AN6062 表 6，Flash AXI 96 MHz、VOS0：LATENCY=2，WRHIGHFREQ=01。 */
-#define MCU_FLASH_PLL_TIMING (2U | (1U << MCU_FLASH_WRHIGHFREQ_SHIFT))
+
+typedef struct {
+    uint32 m;
+    uint32 n;
+    uint32 p;
+    uint32 inputRange;
+    uint32 flashTiming;
+} Mcu_PllProfileType;
+
+/* 两档都使用宽 VCO 与 VOS high。Flash 时序见 AN6062 表 6。 */
+static const Mcu_PllProfileType pll192 = {
+    .m = 4U, .n = 128U, .p = 4U, .inputRange = MCU_PLL1_RGE_4_8,
+    .flashTiming = 2U | (1U << MCU_FLASH_WRHIGHFREQ_SHIFT)  /* Flash AXI 96 MHz。 */
+};
+
+static const Mcu_PllProfileType pll600 = {
+    .m = 2U, .n = 50U, .p = 1U, .inputRange = MCU_PLL1_RGE_8_16,
+    .flashTiming = 7U | (3U << MCU_FLASH_WRHIGHFREQ_SHIFT)  /* Flash AXI 300 MHz。 */
+};
 
 uint32 SystemCoreClock = MCU_HSI_HZ;
 static bool initialized;
 static bool pllOwned;
-static bool pllPrepared;
+static const Mcu_PllProfileType *preparedPll;
 static uint32 resetRawValue;
 static Mcu_ClockResultType lastError;
 static Mcu_ClockResultType fallbackResult;
@@ -122,7 +136,7 @@ static void Mcu_SetBusDividers(uint32 ahb, uint32 apb)
 
 static Mcu_ClockResultType Mcu_EnterHsi(void)
 {
-    pllPrepared = false;
+    preparedPll = NULL;
     MCU_RCC_CR |= MCU_HSION;
     if (!Mcu_RegWait(&MCU_RCC_CR, MCU_HSIRDY, MCU_HSIRDY)) {
         return MCU_CLOCK_HSI_TIMEOUT;
@@ -169,7 +183,8 @@ Mcu_ClockResultType Mcu_DrvInitClock(Mcu_ClockType profile)
     if (!initialized) {
         return MCU_CLOCK_NOT_INITIALIZED;
     }
-    if (profile != MCU_CLOCK_HSI && profile != MCU_CLOCK_PLL1_192MHZ) {
+    if (profile != MCU_CLOCK_HSI && profile != MCU_CLOCK_PLL1_192MHZ &&
+        profile != MCU_CLOCK_PLL1_600MHZ) {
         return MCU_CLOCK_INVALID_PROFILE;
     }
 
@@ -179,6 +194,13 @@ Mcu_ClockResultType Mcu_DrvInitClock(Mcu_ClockType profile)
     if (lastError != MCU_CLOCK_OK || profile == MCU_CLOCK_HSI) {
         return lastError;
     }
+
+    if (profile == MCU_CLOCK_PLL1_600MHZ && (MCU_FLASH_OBW2SR & MCU_FLASH_SRAM_ECC) != 0U) {
+        /* DS14359 表 26：SRAM ECC 启用时不允许进入 600 MHz 档，继续使用 HSI。 */
+        lastError = MCU_CLOCK_SRAM_ECC_ENABLED;
+        return lastError;
+    }
+    const Mcu_PllProfileType *pll = profile == MCU_CLOCK_PLL1_600MHZ ? &pll600 : &pll192;
 
     /* MB1737 使用 LDO 为 Vcore 供电。只从复位态选择 LDO，保留已配置的其他位。 */
     if ((MCU_PWR_CSR2 & MCU_PWR_SUPPLY_MASK) == MCU_PWR_STARTUP_SUPPLY) {
@@ -217,12 +239,12 @@ Mcu_ClockResultType Mcu_DrvInitClock(Mcu_ClockType profile)
         return Mcu_ClockFailure(MCU_CLOCK_HSE_TIMEOUT);
     }
 
+    /* M 直接编码，N/P 写入分频值减一。600 MHz 档为 24 / 2 × 50 / 1。 */
     Mcu_RegUpdate(&MCU_RCC_PLLCKSELR, MCU_PLLSRC_MASK | MCU_DIVM1_MASK,
-                  MCU_SW_HSE | (MCU_PLL_M << MCU_DIVM1_SHIFT));
-    Mcu_RegUpdate(&MCU_RCC_PLLCFGR, MCU_PLL1_CFG_MASK,
-                  MCU_PLL1_RGE_4_8 | MCU_PLL1_PEN);
+                  MCU_SW_HSE | (pll->m << MCU_DIVM1_SHIFT));
+    Mcu_RegUpdate(&MCU_RCC_PLLCFGR, MCU_PLL1_CFG_MASK, pll->inputRange | MCU_PLL1_PEN);
     Mcu_RegUpdate(&MCU_RCC_PLL1DIVR1, MCU_PLL1_DIVN_MASK | MCU_PLL1_DIVP_MASK,
-                  (MCU_PLL_N - 1U) | ((MCU_PLL_P - 1U) << MCU_PLL1_DIVP_SHIFT));
+                  (pll->n - 1U) | ((pll->p - 1U) << MCU_PLL1_DIVP_SHIFT));
     pllOwned = true;
     MCU_RCC_CR |= MCU_PLL1ON;
     if (!Mcu_RegWait(&MCU_RCC_CR, MCU_PLL1RDY, MCU_PLL1RDY)) {
@@ -230,7 +252,7 @@ Mcu_ClockResultType Mcu_DrvInitClock(Mcu_ClockType profile)
     }
 
     /* 到这里 PLL 已锁定，但 CPU 仍取 HSI。分配接口负责最后的切换。 */
-    pllPrepared = true;
+    preparedPll = pll;
     return MCU_CLOCK_OK;
 }
 
@@ -244,7 +266,7 @@ Mcu_ClockResultType Mcu_DrvDistributePllClock(void)
     if (!initialized) {
         return MCU_CLOCK_NOT_INITIALIZED;
     }
-    if (!pllPrepared) {
+    if (preparedPll == NULL) {
         return MCU_CLOCK_PLL_NOT_PREPARED;
     }
     if (Mcu_DrvPllStatus() != MCU_PLL_LOCKED) {
@@ -252,7 +274,7 @@ Mcu_ClockResultType Mcu_DrvDistributePllClock(void)
     }
 
     /* 先调整 Flash 等待周期及总线分频，再让 CPU 使用较高频率。 */
-    if (!Mcu_SetFlashTiming(MCU_FLASH_PLL_TIMING)) {
+    if (!Mcu_SetFlashTiming(preparedPll->flashTiming)) {
         return Mcu_ClockFailure(MCU_CLOCK_FLASH_TIMING_FAILED);
     }
     Mcu_SetBusDividers(MCU_PLL_AHB_DIV2, MCU_PLL_APB_DIV2);
@@ -277,4 +299,30 @@ Mcu_ClockResultType Mcu_DrvLastClockError(void)
 Mcu_ClockResultType Mcu_DrvFallbackResult(void)
 {
     return fallbackResult;
+}
+
+bool Mcu_DrvEnableUsart3Clock(void)
+{
+    if (!initialized) {
+        return false;
+    }
+    if ((MCU_RCC_CCIPR2 & MCU_UART_GROUP_SEL_MASK) != MCU_UART_GROUP_PCLK1) {
+        /* 共享选择器。已有同组实例启用时，拒绝更改其时钟来源。 */
+        if ((MCU_RCC_APB1ENR1 & MCU_UART_GROUP_GATES) != 0U) {
+            return false;
+        }
+        Mcu_RegUpdate(&MCU_RCC_CCIPR2, MCU_UART_GROUP_SEL_MASK, MCU_UART_GROUP_PCLK1);
+    }
+
+    MCU_RCC_APB1ENR1 |= MCU_USART3_GATE;
+    return (MCU_RCC_APB1ENR1 & MCU_USART3_GATE) != 0U;
+}
+
+uint32 Mcu_DrvGetUsart3ClockHz(void)
+{
+    if ((MCU_RCC_APB1ENR1 & MCU_USART3_GATE) == 0U ||
+        (MCU_RCC_CCIPR2 & MCU_UART_GROUP_SEL_MASK) != MCU_UART_GROUP_PCLK1) {
+        return 0U;
+    }
+    return Mcu_DrvReadClocks().apb1Hz;
 }

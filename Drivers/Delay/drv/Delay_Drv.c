@@ -1,3 +1,4 @@
+#include <stddef.h>
 #include "Delay_Drv.h"
 #include "Delay_Reg.h"
 #include "Mcu.h"
@@ -31,5 +32,14 @@ bool Delay_DrvWait(uint32 duration, uint32 unitsPerSecond)
         remaining -= chunk;
     }
 
+    return true;
+}
+
+bool Delay_DrvGetCycleCount(uint32 *cycles)
+{
+    if (cycles == NULL || !Delay_RegCounterEnabled()) {
+        return false;
+    }
+    *cycles = Delay_RegReadCounter();
     return true;
 }

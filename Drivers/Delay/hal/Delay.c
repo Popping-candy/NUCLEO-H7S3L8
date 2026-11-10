@@ -15,3 +15,8 @@ bool Delay_Ms(uint32 milliseconds)
 {
     return Delay_DrvWait(milliseconds, 1000U);
 }
+
+bool Delay_GetCycleCount(uint32 *cycles)
+{
+    return Delay_DrvGetCycleCount(cycles);
+}

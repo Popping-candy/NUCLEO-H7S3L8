@@ -2,7 +2,7 @@
 
 [开发笔记](../README.md) · [上电与调试](../firmware/bringup-debug.md) · [外设实验](peripherals-io.md) · [官方资料对照](../reference/references.md)
 
-本文以 **MB1737-H7S3L8-B02** 为基线，跳线和焊桥按出厂配置描述。接线前对照板背版本贴纸和实物。**灯数和连线来自 ST 手册与原理图**。本项目已实测 Rev B 的 ST-LINK 烧录、指令步进和三灯 GPIO 切换。串口输出及断电冷启动仍待验证。 [UM3276](https://www.st.com/resource/en/user_manual/um3276-stm32h7rx7sx-nucleo144-board-mb1737-stmicroelectronics.pdf) · [B02 原理图](https://www.st.com/resource/en/schematic_pack/mb1737-h7s3l8-b02-schematic.pdf) · [命令行调试实测](../toolchain/stlink-gdb-cli.md)
+本文以 **MB1737-H7S3L8-B02** 为基线，跳线和焊桥按出厂配置描述。接线前对照板背版本贴纸和实物。**灯数和连线来自 ST 手册与原理图**。本项目已实测 Rev B 的 ST-LINK 烧录、指令步进和三灯 GPIO 切换。板载 USART3 VCP 的启动输出和回显已通过验证，断电冷启动待验证。 [串口实测](../firmware/uart.md) · [UM3276](https://www.st.com/resource/en/user_manual/um3276-stm32h7rx7sx-nucleo144-board-mb1737-stmicroelectronics.pdf) · [B02 原理图](https://www.st.com/resource/en/schematic_pack/mb1737-h7s3l8-b02-schematic.pdf) · [命令行调试实测](../toolchain/stlink-gdb-cli.md)
 
 ## 先辨认板子与接口
 

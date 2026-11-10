@@ -10,4 +10,6 @@ void Port_DrvRefreshDirection(void);
 uint16 Port_DrvConfiguredPins(uint8 port);
 uint16 Port_DrvOutputPins(uint8 port);
 
+bool Port_DrvConfigureAlternate(const Port_AlternatePinConfigType *pins, uint16 count);
+
 #endif

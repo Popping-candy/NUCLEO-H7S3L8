@@ -1,11 +1,13 @@
 #ifndef MCU_H
 #define MCU_H
 
+#include <stdbool.h>
 #include "Std_Types.h"
 
 typedef enum {
     MCU_CLOCK_HSI,
-    MCU_CLOCK_PLL1_192MHZ
+    MCU_CLOCK_PLL1_192MHZ,
+    MCU_CLOCK_PLL1_600MHZ
 } Mcu_ClockType;
 
 typedef enum {
@@ -36,7 +38,8 @@ typedef enum {
     MCU_CLOCK_PLL_LOCK_TIMEOUT,
     MCU_CLOCK_PLL_NOT_PREPARED,
     MCU_CLOCK_FLASH_TIMING_FAILED,
-    MCU_CLOCK_PLL_SWITCH_TIMEOUT
+    MCU_CLOCK_PLL_SWITCH_TIMEOUT,
+    MCU_CLOCK_SRAM_ECC_ENABLED  /* 600 MHz 档要求 SRAM ECC 关闭。 */
 } Mcu_ClockResultType;
 
 typedef struct {
@@ -66,5 +69,10 @@ Mcu_ClockResultType Mcu_GetFallbackResult(void);
 
 /* CMSIS 约定的 CPU 时钟快照，时钟切换后由驱动更新。 */
 extern uint32 SystemCoreClock;
+
+/* 启动阶段使能 USART3 门控并选择 PCLK1。共享选择器无法切换时返回 false。 */
+bool Mcu_EnableUsart3Clock(void);
+/* 返回 USART3 内核时钟的标称频率。门控关闭或来源不受支持时返回 0 Hz。 */
+uint32 Mcu_GetUsart3ClockHz(void);
 
 #endif

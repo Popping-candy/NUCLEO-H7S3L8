@@ -14,10 +14,13 @@ typedef struct {
     volatile const uint32 idr;
     volatile uint32 odr;
     volatile uint32 bsrr;
+    volatile uint32 lckr;
+    volatile uint32 afr[2]; /* AFRL 管 0~7，AFRH 管 8~15。 */
 } Gpio_RegBlock;
 
 _Static_assert(offsetof(Gpio_RegBlock, idr) == 0x10U, "GPIO IDR offset");
 _Static_assert(offsetof(Gpio_RegBlock, bsrr) == 0x18U, "GPIO BSRR offset");
+_Static_assert(offsetof(Gpio_RegBlock, afr) == 0x20U, "GPIO AFRL offset");
 
 #define GPIO_REG_RCC_AHB4ENR (*(volatile uint32 *)(uintptr_t)0x58024540UL)
 
@@ -73,20 +76,39 @@ static inline void Gpio_RegSetDirection(uint8 port, uint8 pin, bool output)
     gpio->moder = (gpio->moder & ~(3UL << shift)) | ((uint32)output << shift);
 }
 
+static inline void Gpio_RegSetElectrical(Gpio_RegBlock *gpio, uint8 pin, uint8 pull,
+                                         uint8 speed, bool openDrain)
+{
+    const uint32 shift = 2U * pin;
+    gpio->otyper = (gpio->otyper & ~(1UL << pin)) | ((uint32)openDrain << pin);
+    gpio->ospeedr = (gpio->ospeedr & ~(3UL << shift)) | ((uint32)speed << shift);
+    gpio->pupdr = (gpio->pupdr & ~(3UL << shift)) | ((uint32)pull << shift);
+}
+
 static inline void Gpio_RegConfigure(uint8 port, uint8 pin, bool output, uint8 pull, bool high)
 {
-    Gpio_RegBlock *gpio = Gpio_RegBlockAt(port);
     const uint16 bit = (uint16)(1UL << pin);
-    const uint32 shift = 2U * pin;
 
-    gpio->otyper &= ~(uint32)bit;       /* OTYPER = 0，推挽。 */
-    gpio->ospeedr &= ~(3UL << shift);   /* OSPEEDR = 00，低速。 */
-    gpio->pupdr = (gpio->pupdr & ~(3UL << shift)) | ((uint32)pull << shift);
+    Gpio_RegSetElectrical(Gpio_RegBlockAt(port), pin, pull, 0U, false);
     if (output) {
         /* 先预装输出锁存位，再切输出模式，避免由旧锁存值产生毛刺。 */
         Gpio_RegWriteOutputs(port, bit, high ? bit : 0U);
     }
     Gpio_RegSetDirection(port, pin, output);
+}
+
+static inline void Gpio_RegConfigureAlternate(uint8 port, uint8 pin, uint8 af,
+                                              uint8 pull, uint8 speed, bool openDrain)
+{
+    Gpio_RegBlock *gpio = Gpio_RegBlockAt(port);
+    const uint32 afShift = 4U * (pin % 8U);
+    const uint32 modeShift = 2U * pin;
+    volatile uint32 *afr = &gpio->afr[pin / 8U];
+
+    /* 先设电气属性和 AF 编号，再让外设接管引脚。 */
+    Gpio_RegSetElectrical(gpio, pin, pull, speed, openDrain);
+    *afr = (*afr & ~(15UL << afShift)) | ((uint32)af << afShift);
+    gpio->moder = (gpio->moder & ~(3UL << modeShift)) | (2UL << modeShift);
 }
 
 #endif

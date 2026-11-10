@@ -43,6 +43,8 @@ target_sources(${PROJECT_NAME} PRIVATE
   Drivers/Port/drv/Port_Drv.c
   Drivers/Dio/hal/Dio.c
   Drivers/Dio/drv/Dio_Drv.c
+  Drivers/Uart/hal/Uart.c
+  Drivers/Uart/drv/Uart_Drv.c
 )
 
 # Add include directories
@@ -63,6 +65,9 @@ target_include_directories(${PROJECT_NAME} PRIVATE
   Drivers/Port/drv
   Drivers/Dio/hal
   Drivers/Dio/drv
+  Drivers/Uart/hal
+  Drivers/Uart/drv
+  Drivers/Uart/reg
 )
 
 # Compiler options

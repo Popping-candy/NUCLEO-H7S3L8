@@ -1,6 +1,7 @@
 #ifndef PORT_H
 #define PORT_H
 
+#include <stdbool.h>
 #include "Gpio_Pins.h"
 
 #define PORT_MODULE_ID             124U
@@ -42,11 +43,34 @@ typedef struct Port_ConfigTag {
     uint16 count;
 } Port_ConfigType;
 
+typedef enum {
+    PORT_SPEED_LOW,
+    PORT_SPEED_MEDIUM,
+    PORT_SPEED_HIGH,
+    PORT_SPEED_VERY_HIGH
+} Port_PinSpeedType;
+
+typedef enum {
+    PORT_OUTPUT_PUSH_PULL,
+    PORT_OUTPUT_OPEN_DRAIN
+} Port_PinOutputType;
+
+typedef struct {
+    Port_PinType pin;
+    uint8 alternateFunction; /* AF0~AF15，实际映射由芯片引脚表决定。 */
+    Port_PinPullType pull;
+    Port_PinSpeedType speed;
+    Port_PinOutputType outputType;
+} Port_AlternatePinConfigType;
+
 /* NULL 使用默认板级配置。传入自定义列表时，成功后该列表成为 Dio 的可访问集合。
  * 非法引脚、重复引脚或无效参数会拒绝整批配置。调用返回后不保存列表指针。
  */
 void Port_Init(const Port_ConfigType *ConfigPtr);
 void Port_RefreshPortDirection(void);
 void Port_GetVersionInfo(Std_VersionInfoType *versioninfo);
+
+/* 批量配置复用引脚。整表校验成功才写寄存器，成功后 Dio 不再访问这些引脚。 */
+bool Port_ConfigureAlternate(const Port_AlternatePinConfigType *pins, uint16 count);
 
 #endif

@@ -95,3 +95,46 @@ uint16 Port_DrvOutputPins(uint8 port)
 {
     return outputPins[port];
 }
+
+bool Port_DrvConfigureAlternate(const Port_AlternatePinConfigType *pins, uint16 count)
+{
+    if (pins == NULL || count == 0U || count > GPIO_PIN_COUNT) {
+        return false;
+    }
+
+    uint16 selected[GPIO_PORT_SLOTS] = {0};
+    for (uint16 i = 0U; i < count; ++i) {
+        const Port_AlternatePinConfigType *pin = &pins[i];
+        if (!Gpio_PinExists(pin->pin) || pin->alternateFunction > 15U ||
+            (unsigned int)pin->pull > PORT_PULL_DOWN ||
+            (unsigned int)pin->speed > PORT_SPEED_VERY_HIGH ||
+            (unsigned int)pin->outputType > PORT_OUTPUT_OPEN_DRAIN) {
+            return false;
+        }
+
+        const uint8 port = Gpio_PinPort(pin->pin);
+        const uint16 bit = Gpio_PinBit(pin->pin);
+        if ((selected[port] & bit) != 0U) {
+            return false;
+        }
+        selected[port] |= bit;
+    }
+
+    const uint32 lock = Gpio_RegLock();
+    for (uint8 port = 0U; port < GPIO_PORT_SLOTS; ++port) {
+        if (selected[port] != 0U) {
+            Gpio_RegEnableClock(port);
+            /* 复用引脚交给外设，Dio 和方向刷新都跳过它们。 */
+            configuredPins[port] &= (uint16)~selected[port];
+            outputPins[port] &= (uint16)~selected[port];
+        }
+    }
+    for (uint16 i = 0U; i < count; ++i) {
+        const Port_AlternatePinConfigType *pin = &pins[i];
+        Gpio_RegConfigureAlternate(Gpio_PinPort(pin->pin), Gpio_PinIndex(pin->pin),
+                                   pin->alternateFunction, (uint8)pin->pull, (uint8)pin->speed,
+                                   pin->outputType == PORT_OUTPUT_OPEN_DRAIN);
+    }
+    Gpio_RegUnlock(lock);
+    return true;
+}

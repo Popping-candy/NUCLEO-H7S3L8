@@ -4,18 +4,18 @@
 
 ## 第一次上板
 
-当前工程已验证命令行烧录、调试、PLL1 和三灯流水。USART3 VCP 输出和脱离调试器的断电冷启动待验证。先看[工程文件与构建方式](project-layout.md)。
+当前工程已验证命令行烧录、调试、PLL1 和三灯流水。[USART3 VCP](uart.md) 已通过启动输出和回显验证。脱离调试器的断电冷启动待验证。先看[工程文件与构建方式](project-layout.md)。
 
 | 步骤 | 操作 | 通过条件 |
 | --- | --- | --- |
 | 1. 检查与上电 | 核对 JP1/JP2/JP3/JP5，暂时拔掉扩展模块，用数据线接 CN5 | 供电指示正常，电脑枚举 ST-LINK 和 VCP |
 | 2. 确认 SWD | 用 STM32CubeProgrammer 选择 ST-LINK/SWD 并连接 | 可读目标信息和内部 Flash。记下器件、硅修订号及选项字节 |
-| 3. 构建片内镜像 | 构建当前工程的 Debug 预设，核对链接脚本和 ELF 段地址 | 片内用户 Flash 入口在 `0x08000000`，可装载段在配置范围内 |
+| 3. 构建片内镜像 | 板级功能验证构建 Release，源码级调试可选 Debug。烧录前核对 ELF 的装载地址和覆盖扇区 | 应用向量表在 `0x08000000`，装载段位于固件区，待保留的数据已有备份 |
 | 4. 烧录与调试 | 在 VS Code 加载片内 ELF，或用 CubeProgrammer 下载并校验，再复位 | 能停在 `main()`；排查启动时再在 `Reset_Handler` 设断点 |
-| 5. 验证板载 I/O | 运行当前默认应用，观察三灯逐个亮灭。之后接入 USART3 PD8/PD9 时再验证 VCP | 三灯按 LD1、LD2、LD3 顺序切换，每步约 1 秒 |
-| 6. 独立运行 | 退出调试会话，保留 CN5 供电，按 B1，再断电重上 | 两次都重新进入流水灯，串口接入后同时检查日志 |
+| 5. 验证板载 I/O | 运行当前默认应用，观察三灯逐个亮灭，通过 CN5 打开 VCP | 三灯按 LD1、LD2、LD3 顺序切换，每步约 1 秒。串口可收启动行并回显 |
+| 6. 独立运行 | 退出调试会话，保留 CN5 供电，按 B1，再断电重上 | 两次都重新进入流水灯，打开 VCP 时同时检查启动日志 |
 
-采用 HAL 时，先初始化 HAL 和时基，再用 `HAL_Delay` 闪灯。当前工程尚未引入 HAL。在断点处，CPU 停机时 LED 也可能停在当前状态。现有示例的板载 LED、按键或串口也可用于验证，现象以该例程的 README 为准。 [官方片内模板](https://github.com/STMicroelectronics/STM32CubeH7RS/tree/main/Projects/NUCLEO-H7S3L8/Templates/Template) · [STM32CubeProgrammer](https://www.st.com/en/development-tools/stm32cubeprog.html)
+采用 STM32Cube HAL 的例程时，先初始化该库和时基，再用 `HAL_Delay` 闪灯。本工程的 HAL 目录是自有驱动的对外接口层。在断点处，CPU 停机时 LED 也可能停在当前状态。现有示例的板载 LED、按键或串口也可用于验证，现象以该例程的 README 为准。 [官方片内模板](https://github.com/STMicroelectronics/STM32CubeH7RS/tree/main/Projects/NUCLEO-H7S3L8/Templates/Template) · [STM32CubeProgrammer](https://www.st.com/en/development-tools/stm32cubeprog.html)
 
 ## 从复位到 main
 

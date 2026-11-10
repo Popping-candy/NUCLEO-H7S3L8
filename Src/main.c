@@ -21,6 +21,7 @@
 #include "Dio.h"
 #include "Mcu.h"
 #include "Port.h"
+#include "Uart.h"
 
 /* GDB 可直接读取启动快照，即使 Release 构建也会保留这些写入。 */
 static volatile struct {
@@ -28,9 +29,22 @@ static volatile struct {
     uint32 resetRaw;
     Mcu_ClockResultType error;
     Mcu_ClockResultType fallback;
+    uint32 uartClockHz;
+    Uart_ResultType uartResult;
+    bool uartPinsReady;
 } mcuBootReport;
 
 #define LED_STEP_MS 1000U
+#define UART_BAUD 115200U
+#define UART_TX_TIMEOUT_MS 10U
+
+/* MB1737 默认接线，PD8/PD9 连接到 ST-LINK VCP。 */
+static const Port_AlternatePinConfigType vcpPins[] = {
+    {GPIO_PIN_PD8, 7U, PORT_PULL_UP,   PORT_SPEED_LOW, PORT_OUTPUT_PUSH_PULL},
+    {GPIO_PIN_PD9, 7U, PORT_PULL_UP,   PORT_SPEED_LOW, PORT_OUTPUT_PUSH_PULL}
+};
+
+static bool uartReady;
 
 static const Dio_ChannelType userLeds[] = {
     DioConf_DioChannel_LD1,
@@ -45,14 +59,61 @@ static _Noreturn void App_Stop(void)
     }
 }
 
+static void App_InitUart(void)
+{
+    /* 先让线路处于空闲高电平，再启用 USART 接收，避免复位时误收。 */
+    mcuBootReport.uartPinsReady =
+        Port_ConfigureAlternate(vcpPins, sizeof vcpPins / sizeof vcpPins[0]);
+    if (!mcuBootReport.uartPinsReady) {
+        return;
+    }
+
+    mcuBootReport.uartResult = Uart_Init(UART_BAUD);
+    mcuBootReport.uartClockHz = Mcu_GetUsart3ClockHz();
+    uartReady = mcuBootReport.uartResult == UART_OK;
+
+    for (const char *message = "NUCLEO-H7S3L8 USART3 ready\r\n";
+         uartReady && *message != '\0'; ++message) {
+        const Uart_ResultType result = Uart_WriteByte((uint8)*message, UART_TX_TIMEOUT_MS);
+        if (result != UART_OK) {
+            mcuBootReport.uartResult = result;
+            uartReady = false;
+        }
+    }
+}
+
+static void App_WaitLedStep(void)
+{
+    const uint32 cycles = (SystemCoreClock / 1000U) * LED_STEP_MS;
+    uint32 start;
+    uint32 now;
+    if (cycles == 0U || !Delay_GetCycleCount(&start)) {
+        App_Stop();
+    }
+    do {
+        uint8 data;
+        if (uartReady && Uart_ReadByte(&data, 0U) == UART_OK) {
+            const Uart_ResultType result = Uart_WriteByte(data, UART_TX_TIMEOUT_MS);
+            if (result != UART_OK) {
+                mcuBootReport.uartResult = result;
+                uartReady = false;
+            }
+        }
+        if (!Delay_GetCycleCount(&now)) {
+            App_Stop();
+        }
+        /* 无符号减法可跨过一次 DWT CYCCNT 回绕。 */
+    } while ((uint32)(now - start) < cycles);
+}
+
 static void App_SetLedsInOrder(Dio_LevelType level, bool waitAfterLast)
 {
     const size_t count = sizeof userLeds / sizeof userLeds[0];
 
     for (size_t i = 0U; i < count; ++i) {
         Dio_WriteChannel(userLeds[i], level);
-        if ((waitAfterLast || i + 1U < count) && !Delay_Ms(LED_STEP_MS)) {
-            App_Stop();
+        if (waitAfterLast || i + 1U < count) {
+            App_WaitLedStep();
         }
     }
 }
@@ -60,7 +121,7 @@ static void App_SetLedsInOrder(Dio_LevelType level, bool waitAfterLast)
 int main(void)
 {
     Mcu_Init();
-    if (Mcu_InitClock(MCU_CLOCK_PLL1_192MHZ) == MCU_CLOCK_OK) {
+    if (Mcu_InitClock(MCU_CLOCK_PLL1_600MHZ) == MCU_CLOCK_OK) {
         (void)Mcu_DistributePllClock();
     }
     mcuBootReport.clocks = Mcu_GetClockInfo();
@@ -73,6 +134,8 @@ int main(void)
     if (!Delay_Init()) {
         App_Stop();
     }
+
+    App_InitUart();
 
     /* 上电先逐个点亮，随后按原顺序逐个熄灭、逐个点亮。 */
     App_SetLedsInOrder(STD_HIGH, false);

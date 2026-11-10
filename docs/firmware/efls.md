@@ -14,7 +14,7 @@ Efls 是 STM32H7S3L8H6 的片内用户 Flash 驱动。Fls 留给板载外置 NOR
 
 [HAL](../../Drivers/Efls/hal/Efls.h) 定义接口与返回值。[DRV](../../Drivers/Efls/drv/Efls_Drv.c) 做边界、对齐和读回检查。[寄存器层](../../Drivers/Efls/reg/Efls_Reg.c) 解锁控制器、发起操作、轮询 BUSY/QW、检查错误并上锁。启动代码把擦写例程复制到 AXI SRAM。它沿用链接脚本现有的 .RamFunc 机制，链接了该例程的镜像会产生一个同时包含可写数据与可执行代码的 RAM 段，GNU ld 会提示 RWX。
 
-接口用于启动后从线程上下文同步调用。擦写期间屏蔽可屏蔽中断。当前擦写要求 D-Cache 关闭。多块写入可能在部分完成后返回错误。轮询上限到达且控制器仍忙时保留操作位，等后续调用确认空闲再清理。读取接口按普通内存映射读取，Flash ECC 的异常处理仍遵循芯片机制。 [DS14359](https://www.st.com/resource/en/datasheet/stm32h7s3l8.pdf) · [RM0477](https://www.st.com/resource/en/reference_manual/rm0477-stm32h7rx7sx-armbased-32bit-mcus-stmicroelectronics.pdf) · [ST 器件头文件](https://github.com/STMicroelectronics/cmsis-device-h7rs/blob/main/Include/stm32h7s3xx.h)
+接口用于启动后从线程上下文同步调用。擦写期间屏蔽可屏蔽中断。当前擦写要求 D-Cache 关闭。多块写入可能在部分完成后返回错误。每次擦除或 16 字节编程用 DWT 计时，轮询预算为 3 秒。计数器不可用时在发起操作前返回 `EFLS_TIMEBASE_UNAVAILABLE`。超时时若控制器仍忙，保留操作位，等后续调用确认空闲再清理。600 MHz 档的擦写回归见 [验证报告](clock-600mhz-report.md)。读取接口按普通内存映射读取，Flash ECC 的异常处理仍遵循芯片机制。 [DS14359](https://www.st.com/resource/en/datasheet/stm32h7s3l8.pdf) · [RM0477](https://www.st.com/resource/en/reference_manual/rm0477-stm32h7rx7sx-armbased-32bit-mcus-stmicroelectronics.pdf) · [ST 器件头文件](https://github.com/STMicroelectronics/cmsis-device-h7rs/blob/main/Include/stm32h7s3xx.h)
 
 ## 2026-11-09 实板验证
 

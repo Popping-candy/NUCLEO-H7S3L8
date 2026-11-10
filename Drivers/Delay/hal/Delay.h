@@ -13,4 +13,7 @@ bool Delay_Init(void);
 bool Delay_Us(uint32 microseconds);
 bool Delay_Ms(uint32 milliseconds);
 
+/* 读取自由运行的 DWT 周期计数，用于轮询任务与短超时。 */
+bool Delay_GetCycleCount(uint32 *cycles);
+
 #endif

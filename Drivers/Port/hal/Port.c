@@ -18,3 +18,8 @@ void Port_GetVersionInfo(Std_VersionInfoType *versioninfo)
         *versioninfo = (Std_VersionInfoType){0U, PORT_MODULE_ID, 1U, 0U, 0U};
     }
 }
+
+bool Port_ConfigureAlternate(const Port_AlternatePinConfigType *pins, uint16 count)
+{
+    return Port_DrvConfigureAlternate(pins, count);
+}

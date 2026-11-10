@@ -39,3 +39,13 @@ Mcu_ClockResultType Mcu_GetFallbackResult(void)
 {
     return Mcu_DrvFallbackResult();
 }
+
+bool Mcu_EnableUsart3Clock(void)
+{
+    return Mcu_DrvEnableUsart3Clock();
+}
+
+uint32 Mcu_GetUsart3ClockHz(void)
+{
+    return Mcu_DrvGetUsart3ClockHz();
+}

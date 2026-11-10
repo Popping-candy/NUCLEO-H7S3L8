@@ -7,18 +7,22 @@
 ## 1. 准备
 
 - 板卡通过 **CN5** 接电脑，退出占用探针的 VS Code 调试会话或 CubeProgrammer。
-- 从固件项目根目录运行。确认已有匹配的 `build/Debug/NUCLEO-H7S3L8.elf`，以及 STM32Cube 工具包。
+- 从固件项目根目录运行，准备 STM32Cube 工具包和与板上固件匹配的 ELF。下文示例使用 `build/Release/NUCLEO-H7S3L8.elf`。
 - 本机实测的包为 GDB Server `7.14.0+st.2`、GNU GDB `14.3.1+st.2`、CubeProgrammer `2.23.0`。安装版本变化后，在 `$env:LOCALAPPDATA\stm32cube\bundles` 下核对路径。
 
 ## 烧录、校验与复位
 
-核对目标板及 ELF 的装载地址。片内工程的可加载数据应位于 0x08000000–0x0800FFFF。用探针列表确认板名，多个探针时在连接参数加 sn= 对应序列号。以下命令以 SWD 1 MHz 和 AP 1 在本板实测通过。
+先核对目标板及 ELF 的装载范围。对每个带数据的 `LOAD` 段，用 `PhysAddr` 和 `FileSiz` 确认实际占用的扇区。当前链接脚本的固件区是 `0x08000000–0x0800DFFF`，第 7 扇区留给 Efls。已验证的 600 MHz Release 镜像只覆盖第 0 扇区，Debug 镜像还覆盖第 1 扇区。需要保留后续扇区的数据时，先按实际镜像核对覆盖范围并备份。 [600 MHz 实板记录](../firmware/clock-600mhz-report.md)
+
+用探针列表确认板名，多个探针时在连接参数加 `sn=` 对应序列号。
 
 ```powershell
 $stm32Bundles = Join-Path $env:LOCALAPPDATA 'stm32cube\bundles'
 $cube = Join-Path $stm32Bundles 'programmer\2.23.0\bin\STM32_Programmer_CLI.exe'
+$elf = '.\build\Release\NUCLEO-H7S3L8.elf'
+arm-none-eabi-readelf -lW $elf
 & $cube -l stlink
-& $cube -c port=SWD ap=1 freq=1000 mode=UR -d .\build\Debug\NUCLEO-H7S3L8.elf -v -rst
+& $cube -c port=SWD ap=1 freq=1000 mode=UR -d $elf -v -rst
 ```
 
 成功日志应有 Download verified successfully 和 MCU Reset。工具会擦除镜像覆盖的扇区。随后用同一 ELF 附加调试。
@@ -45,7 +49,7 @@ $cubeProgrammerBin = Join-Path $stm32Bundles 'programmer\2.23.0\bin'
 ```powershell
 $stm32Bundles = Join-Path $env:LOCALAPPDATA 'stm32cube\bundles'
 $armGdb = Join-Path $stm32Bundles 'gnu-gdb-for-stm32\14.3.1+st.2\bin\arm-none-eabi-gdb.exe'
-& $armGdb -nx .\build\Debug\NUCLEO-H7S3L8.elf
+& $armGdb -nx .\build\Release\NUCLEO-H7S3L8.elf
 ```
 
 在 GDB 提示符中依次输入：

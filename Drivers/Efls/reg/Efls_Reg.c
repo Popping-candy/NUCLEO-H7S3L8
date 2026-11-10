@@ -1,5 +1,8 @@
 #include <stddef.h>
 #include "Efls_Reg.h"
+#include "Delay.h"
+#include "Delay_Reg.h"
+#include "Mcu.h"
 
 /* 按 STM32H7S3xx CMSIS 定义。SSN 是三位，足以选择 0～7 号扇区。 */
 #define EFLS_REG32(address) (*(volatile uint32 *)(uintptr_t)(address))
@@ -23,6 +26,7 @@
 #define EFLS_BUSY_MASK  ((1U << 0U) | (1U << 2U)) /* BUSY 与 QW */
 #define EFLS_ERROR_MASK ((1U << 17U) | (1U << 18U) | (1U << 19U) | (1U << 21U))
 #define EFLS_EOP        (1U << 16U)
+#define EFLS_TIMEOUT_SECONDS 3U
 
 static bool pendingCleanup;
 
@@ -55,6 +59,12 @@ static Efls_ResultType Efls_RegRun(uint32 command, uintptr_t address,
     if ((EFLS_FLASH_CR & (EFLS_PG | EFLS_SER | EFLS_START | EFLS_OTHER_OP)) != 0U) {
         return EFLS_BUSY;
     }
+    const uint32 hz = SystemCoreClock;
+    if (hz == 0U || hz > UINT32_MAX / 2U / EFLS_TIMEOUT_SECONDS || !Delay_Init()) {
+        return EFLS_TIMEBASE_UNAVAILABLE;
+    }
+    const uint32 timeoutCycles = hz * EFLS_TIMEOUT_SECONDS;
+
     if ((EFLS_FLASH_CR & EFLS_LOCK) != 0U) {
         EFLS_FLASH_KEYR = EFLS_KEY1;
         EFLS_FLASH_KEYR = EFLS_KEY2;
@@ -64,6 +74,7 @@ static Efls_ResultType Efls_RegRun(uint32 command, uintptr_t address,
     }
 
     EFLS_FLASH_ICR = EFLS_EOP | EFLS_ERROR_MASK;
+    const uint32 start = DELAY_DWT_CYCCNT;
     EFLS_FLASH_CR = (EFLS_FLASH_CR & ~EFLS_OP_MASK) | command;
     if (words != NULL) {
         /* ST H7RS 的完整 Flash word 使用八次连续半字写。 */
@@ -74,10 +85,9 @@ static Efls_ResultType Efls_RegRun(uint32 command, uintptr_t address,
     }
     __asm volatile ("dsb\n\tisb" ::: "memory");
 
-    /* 此处以轮询次数设上限。控制器仍忙时不改 CR，后续入口会尝试清理。 */
-    uint32 polls = 40000000U;
+    /* 直接读 DWT，Flash 忙时不调用可能位于同 Bank 的函数。 */
     while ((EFLS_FLASH_SR & EFLS_BUSY_MASK) != 0U) {
-        if (--polls == 0U) {
+        if ((uint32)(DELAY_DWT_CYCCNT - start) >= timeoutCycles) {
             *flags = EFLS_FLASH_ISR;
             pendingCleanup = true;
             return EFLS_TIMEOUT;

@@ -91,7 +91,7 @@ int main(void)
 | --- | --- | --- |
 | GPIO 输出 | PD10 推挽输出驱动 LD1，先确认时钟和有效电平。GPIO speed 控制边沿，按信号需要设置 | 用固定周期闪灯。排针输出可用示波器验证电平和周期 |
 | GPIO 输入 / EXTI | PC13 对应 B2，按下为低。先轮询确认电平，再配下降沿、EXTI/NVIC 和消抖 | 每次按键只累计一次事件。中断中记录标志，主循环打印 |
-| UART / USART | VCP 用 USART3 PD8/PD9。外接 TTL 串口时 TX↔RX、共地、核对电平 | 先用阻塞发送，再做接收回显。最后加中断或 DMA、超时与丢包计数 |
+| UART / USART | 板载 VCP 用 PD8/PD9 的 USART3 AF7，经 CN5 连接电脑。外接 TTL 串口时交叉接 TX/RX、共地并核对电平 | 打开板卡的 COM 口，使用 115200 8N1、无流控，检查启动行和字节回显。 [串口实测](../firmware/uart.md) |
 | I²C / I3C | CN7 上 PB8/PB9 可作 I²C1，开漏、外部上拉。I3C 另查可用实例和引脚，按目标器件配置 | 从 100 kHz I²C 起步，读器件 ID。观察地址、ACK、重复起始和上升时间 |
 | SPI / I²S / SAI | SPI1 可用 CN7；核对 CPOL/CPHA、位序、CS 时序。音频另检查 BCLK、WS、MCLK 和编解码器 | SPI 先读器件 ID，再看波形。音频先输出已知采样率的单音 |
 | TIM / PWM / 捕获 | 可用 PD15/TIM4_CH4。核对定时器内核时钟、PSC、ARR、CCR 和计数模式 | 示波器量频率与占空比，再做输入捕获或编码器 |

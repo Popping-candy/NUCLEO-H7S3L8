@@ -12,4 +12,7 @@ uint32 Mcu_DrvResetRawValue(void);
 Mcu_ClockResultType Mcu_DrvLastClockError(void);
 Mcu_ClockResultType Mcu_DrvFallbackResult(void);
 
+bool Mcu_DrvEnableUsart3Clock(void);
+uint32 Mcu_DrvGetUsart3ClockHz(void);
+
 #endif
